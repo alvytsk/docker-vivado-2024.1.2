@@ -1,0 +1,4 @@
+build/
+build-logs/
+*.log
+config/media.sha256

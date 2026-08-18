@@ -1,0 +1,4 @@
+# The build context is the repo root. Only these are ever COPYed.
+*
+!lib
+!scripts
