@@ -169,30 +169,33 @@ false. Making stage 1 offline too would mean vendoring a base-image tarball and 
 local apt repository; `install.sh` already accepts a pre-pulled base image if you
 go that way.
 
-## Vitis variant
+## Vitis variant — not available offline
 
-Vitis is excluded by default: it roughly doubles the image and is not needed to
-produce `.xsa` or `.bit`, only to build FSBL, `BOOT.BIN` or application ELFs.
+**`make add-vitis` does not work, and the reason is the installer, not this
+build.** Four bounded experiments against the real installed image (recorded in
+full in `docs/installer-facts.md`) establish that `xsetup -b Add` cannot layer
+Vitis onto an existing installation without network access:
 
-```bash
-make add-vitis     # xsetup -b Add against the same media, tags vivado-vitis:2024.1.2
-make test-vitis
-```
+- the ISO's installer refuses, reporting the destination already contains
+  Vivado 2024.1 and directing you to the GUI's *Add Design Tools or Devices*;
+- the installed installer at `/tools/Xilinx/.xinstall/Vivado_2024.1/xsetup`
+  accepts the config, then fails with *"Could not connect to the internet"* —
+  it ignores mounted media and expects to download the payload from AMD.
 
-The variant reuses `docker/Dockerfile.final` unchanged, so its entrypoint, `HOME`
-handling, workdir and environment are identical to the default image by
-construction. The entrypoint sources the Vitis `settings64.sh` *after* Vivado's, and
-only if it exists — shipping the file is not what puts `xsct` on `PATH`; sourcing
-it is.
+`xsetup -b Add --help` documents no option to point Add at local media.
 
-**The asymmetry matters:** adding Vitis later is cheap (a new layer on an existing
-image), but *removing* it later reclaims nothing. Docker layers are additive, so an
-uninstall writes whiteouts while the bytes stay in the parent layer and continue to
-be pushed and pulled. Shrinking requires re-running stage 2 from scratch. That
-asymmetry is precisely why the default is the smaller image.
+The supported offline route is a **single `-b Install` with
+`Edition=Vitis Unified Software Platform`** (that edition includes Vivado),
+which produces a parallel full install rather than an incremental layer. It
+costs roughly another full install and does not reuse
+`vivado-tools:2024.1.2-raw`, so it is a separate build, not a cheap add-on.
 
-The same rule is why `Dockerfile.final` contains no cleanup at all, and why all
-installer scratch is pruned inside stage 2's container before it exits.
+`config/add_config.vitis.txt` holds the correct Vitis product config, captured
+from `xsetup -b ConfigGen -p Vitis -e "Vitis Unified Software Platform"` and
+narrowed to Zynq-7000 only (the generated default enables Versal, Alveo and
+every UltraScale family). It is the right starting point for that build.
+
+This does not affect the Vivado image, which is complete and tested.
 
 ## Image size and distribution
 

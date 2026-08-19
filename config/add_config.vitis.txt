@@ -1,0 +1,21 @@
+#### Vitis Add Configuration ####
+# Edition/Product/Modules captured verbatim from
+#   xsetup -b ConfigGen -p Vitis -e "Vitis Unified Software Platform"
+# run against the installed image (see docs/installer-facts.md). Every module
+# is forced to :0 except Zynq-7000, matching the Vivado install's scope --
+# the generated default enables Versal, Alveo and every UltraScale family and
+# would add hundreds of GB for devices this image does not support.
+#
+# Note there is no "Vitis Embedded Development" module here: with -p Vitis the
+# product IS Vitis, so the tooling is implied and only device data is selected.
+Edition=Vitis Unified Software Platform
+Product=Vitis
+Destination=/tools/Xilinx
+Modules=Virtex UltraScale+ 58G:0,Install Devices for Kria SOMs and Starter Kits:0,Vitis IP Cache (Enable faster on-boarding for new users):0,Versal AI Edge Series ES1:0,Zynq-7000:1,Versal Prime Series ES1:0,Kintex UltraScale+:0,Artix UltraScale+:0,Spartan-7:0,Install devices for Alveo and edge acceleration platforms:0,Engineering Sample Devices for Custom Platforms:0,Vitis Networking P4:0,Artix-7:0,Zynq UltraScale+ MPSoC:0,Versal HBM Series ES1:0,DocNav:0,Versal HBM Series:0,Virtex UltraScale+ HBM:0,Kintex-7:0,Virtex UltraScale+:0,Versal AI Core Series:0,Versal AI Edge Series:0,Kintex UltraScale:0,Versal Premium Series:0,Virtex UltraScale:0,Versal Premium Series ES1:0,Zynq UltraScale+ RFSoC:0,Power Design Manager (PDM):0,Versal AI Core Series ES1:0,Versal Prime Series:0,Virtex-7:0,Virtex UltraScale+ HBM ES:0
+InstallOptions=
+CreateProgramGroupShortcuts=0
+ProgramGroupFolder=Xilinx Design Tools
+CreateShortcutsForAllUsers=0
+CreateDesktopShortcuts=0
+CreateFileAssociation=0
+EnableDiskUsageOptimization=1

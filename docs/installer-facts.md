@@ -243,7 +243,41 @@ guessing worse than deferring: the generated Vitis config already carries
 `Zynq-7000:1`, and `Vitis Embedded Development` does not appear in `Modules=` at
 all — the installer lists it as a *product* name, alongside "Vitis" and "Vivado".
 
-**Decision:** DEFERRED to Task 15 Step 0 — `Vitis Embedded Development` is a product name, not a `Modules=` entry, and the help never states whether `-b Add` takes the complete selection or only the additions; both are settled in minutes against the real installed image.
+**Decision:** resolved 2026-08-19 by experiment against the installed image --
+the `-b Add` route **does not work offline at all**, so `config/add_config.vitis.txt`
+is not an Add config. Four bounded experiments, each answered by the installer:
+
+1. ISO `xsetup -b Add` with `Edition=Vivado ML Standard` →
+   *"The value specified for Edition (Vivado ML Standard) is invalid. Valid
+   edition names are \"Vitis Unified Software Platform\""*. The Vitis product
+   has its own edition name; Vivado's config cannot be reused.
+2. Same, with the corrected edition but Vivado's `Modules=` line →
+   *"The value specified in the configuration file for Modules (...) is not
+   valid."* Vitis has a different module set (no `Vitis Embedded Development`
+   entry: with `-p Vitis` the product IS Vitis, and the list selects devices).
+3. ISO `xsetup -b Add` with the correct Vitis config →
+   *"An existing installation of Vivado 2024.1 has been detected at
+   /tools/Xilinx. To install a new copy ... provide an alternate destination
+   ... To update the current installation, use the 'Add Design Tools or
+   Devices' option from the Help Menu within Vivado"*. The ISO installer
+   treats the destination as occupied and points at the GUI.
+4. The INSTALLED installer, `/tools/Xilinx/.xinstall/Vivado_2024.1/xsetup -b Add`
+   → config **accepted**, then *"Could not connect to the internet using
+   provided information."* It ignores the mounted ISO and expects to download
+   the payload from AMD.
+
+`xsetup -b Add --help` prints only the general help; there is no documented
+option to point `-b Add` at local media.
+
+**Consequence for Task 15 / spec section 10:** Vitis cannot be layered onto the
+existing raw image offline. The supported offline route is a SINGLE
+`-b Install` with `Edition=Vitis Unified Software Platform` (that edition
+includes Vivado), producing a parallel full install rather than an incremental
+layer. That is a different build, roughly as long as the Vivado one, and it
+does not reuse `vivado-tools:2024.1.2-raw`.
+
+`.xinstall` is still worth preserving -- it is what makes the installed
+installer available at all -- but it does not enable an offline Add.
 
 ## Installer log location
 
