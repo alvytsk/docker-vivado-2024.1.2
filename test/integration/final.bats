@@ -14,10 +14,28 @@ IMAGE="${FINAL_IMAGE:-vivado:2024.1.2}"
   [[ "$output" == *"2024.1.2"* ]]
 }
 
-@test "final: image contains no license file" {
-  run docker run --rm --network=none "$IMAGE" \
-    bash -c 'find / -name "*.lic" -not -path "*/proc/*" 2>/dev/null | wc -l'
+@test "final: no license file was added — only AMD's own bundled IP core licenses" {
+  # A blanket "zero .lic files" assertion is wrong: a stock Vivado install
+  # legitimately ships data/ip/core_licenses/{Xilinx,XilinxFree}.lic, which
+  # define which IP cores are free or design-linking. Those are AMD's own
+  # files, signed by "Xilinx Inc", installed by the official installer.
+  #
+  # What must be true is that WE added nothing: no .lic outside AMD's own
+  # core_licenses directory, and no forged all-in-one licence from the
+  # media's Crack/ folder, which this build refuses to use by design.
+  run docker run --rm --network=none "$IMAGE" bash -c \
+    'find / -name "*.lic" -not -path "/proc/*" \
+       -not -path "/tools/Xilinx/*/data/ip/core_licenses/*" 2>/dev/null | wc -l'
   [ "$output" = "0" ]
+}
+
+@test "final: no license is configured, so nothing is unlocked by one" {
+  # The stronger statement: even the bundled IP core licenses are not wired
+  # in. If either variable were set, the image would depend on a licence to
+  # behave as tested.
+  run docker run --rm --network=none "$IMAGE" bash -c \
+    'echo "${XILINX_LICENSE_FILE:-unset}/${LM_LICENSE_FILE:-unset}"'
+  [ "$output" = "unset/unset" ]
 }
 
 @test "final: no installer scratch survived into the image" {
@@ -35,7 +53,7 @@ IMAGE="${FINAL_IMAGE:-vivado:2024.1.2}"
   # anticipated. MAX_IMAGE_GB is recorded from the first good build in Task 11
   # Step 5 with headroom; if a legitimate change grows the image, raise it
   # deliberately and say why in the commit.
-  local max="${MAX_IMAGE_GB:-70}"
+  local max="${MAX_IMAGE_GB:-22}"
   run docker image inspect -f '{{.Size}}' "$IMAGE"
   [ "$status" -eq 0 ]
   local gb=$(( output / 1000000000 ))
