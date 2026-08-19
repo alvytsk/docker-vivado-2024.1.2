@@ -23,21 +23,25 @@ REQUIRED_FREE_GB="${REQUIRED_FREE_GB:-200}"
 # helper would contradict "only stage 1 may use the network", and --network=none
 # makes that impossible rather than merely unlikely.
 #
-# The path comes from the daemon, not from a guess. /var/lib/docker is only the
-# default; with a custom data-root the hardcoded path either does not exist or
-# -- worse -- resolves to a different filesystem, and the preflight then
-# measures free space somewhere the install will never write. Mounted :ro
-# because this only ever reads.
+# Measure the CONTAINER'S OWN WRITABLE LAYER, not a bind-mounted host path.
+#
+# The obvious implementation -- ask the daemon for DockerRootDir and bind-mount
+# it -- is wrong whenever the daemon does not share this filesystem. Under
+# Docker Desktop (WSL2, and equally on macOS or any remote DOCKER_HOST) the
+# daemon lives in its own VM: /var/lib/docker here is an empty stub on the
+# local root, the bind mount resolves to THAT, and df cheerfully reports the
+# free space of a disk the install will never touch. Measured on this machine,
+# the two disagreed by 20 GB and only the container's own layer tracked the
+# install's writes.
+#
+# A container's writable layer is by definition on the storage driver's
+# filesystem -- exactly where stage 2 puts its ~37 GB of diff -- so `df /`
+# inside a throwaway container is the one measurement that is correct on every
+# topology, with no host paths and nothing to guess.
 free_gb() {
   if [[ -n "${FREE_GB:-}" ]]; then printf '%s\n' "$FREE_GB"; return 0; fi
-  local root
-  root="$("$DOCKER" info -f '{{.DockerRootDir}}' 2>/dev/null || true)"
-  if [[ -z "$root" ]]; then
-    echo "WARNING: cannot determine the docker root dir; skipping the space check" >&2
-    return 0
-  fi
-  "$DOCKER" run --rm --network=none -v "${root}:/dh:ro" "$BASE_IMAGE" \
-    df -BG /dh | awk 'NR==2 {gsub(/G/,"",$4); print $4}'
+  "$DOCKER" run --rm --network=none "$BASE_IMAGE" \
+    df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}'
 }
 
 base_id="$("$DOCKER" image inspect -f '{{.Id}}' "$BASE_IMAGE" 2>/dev/null || echo "absent")"

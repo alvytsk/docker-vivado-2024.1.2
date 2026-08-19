@@ -40,3 +40,21 @@ in_image() { docker run --rm --network=none "$IMAGE" "$@"; }
   run bash -c "docker image inspect $IMAGE -f '{{json .Config.Labels}}' | grep -q 2edbbc5d"
   [ "$status" -eq 0 ]
 }
+
+@test "base: en_US.UTF-8 is GENERATED, not merely installable" {
+  # Vivado's launcher unconditionally exports LC_ALL=en_US.UTF-8. If that
+  # locale does not exist, vivado aborts with an unhandled std::runtime_error
+  # that never mentions locales. Having the `locales` package is not enough --
+  # the locale must actually be generated.
+  run docker run --rm --network=none "$IMAGE" locale -a
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"en_US.utf8"* ]]
+}
+
+@test "base: a forced en_US.UTF-8 locale does not fail" {
+  # The exact thing rdiArgs.sh does, reproduced without needing Vivado.
+  run docker run --rm --network=none -e LC_ALL=en_US.UTF-8 -e LANG=en_US.UTF-8 \
+    "$IMAGE" bash -c 'locale >/dev/null 2>/tmp/e; cat /tmp/e'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"cannot change locale"* ]]
+}

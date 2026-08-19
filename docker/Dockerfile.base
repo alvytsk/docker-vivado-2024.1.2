@@ -10,6 +10,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # apt lists are removed in THIS RUN. Removing them later would only add
 # whiteouts while the bytes stayed in this layer and shipped anyway.
+#
+# en_US.UTF-8 must be GENERATED, not merely have the `locales` package present.
+# Vivado's launcher (Vivado/2024.1/bin/rdiArgs.sh, line 37) unconditionally
+# exports LC_ALL/LANG=en_US.UTF-8 regardless of what the image sets. If that
+# locale does not exist, setlocale fails and vivado aborts with an unhandled
+# std::runtime_error before printing so much as its version -- an obscure
+# crash whose message never mentions locales. C.UTF-8 alone is not enough
+# because the launcher overrides it.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libtinfo5 libncurses5 \
@@ -17,6 +25,8 @@ RUN apt-get update && \
         libfreetype6 libfontconfig1 \
         locales ca-certificates gosu \
         unzip zip tar git make python3 net-tools procps && \
+    sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen en_US.UTF-8 && \
     rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -g 1000 vivado && \

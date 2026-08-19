@@ -1,0 +1,24 @@
+# Parameterised so the Vitis variant reuses this exact runtime layer
+# instead of duplicating it (Task 15).
+ARG BASE_IMAGE=vivado-tools:2024.1.2-raw
+FROM ${BASE_IMAGE}
+
+# Runtime contract ONLY. No cleanup here: layers are additive, so deleting
+# anything from the parent would add whiteouts and ship the bytes anyway.
+# --chmod on COPY rather than a following `RUN chmod`: the RUN would add an
+# entire layer to flip one permission bit, and stage 3 sits on top of a ~50 GB
+# parent where every extra layer is another metadata round trip on pull.
+COPY --chmod=0644 lib/idresolve.sh      /usr/local/lib/idresolve.sh
+COPY --chmod=0755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+ENV XILINX_LOCAL_USER_DATA=no \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+WORKDIR /work
+
+LABEL org.opencontainers.image.title="Vivado ML Standard 2024.1.2 (Zynq-7000, headless)" \
+      org.opencontainers.image.description="Headless Vivado for CI. License-free Zynq-7000 subset only: XC7Z007S/010/012S/014S/015/020/030."
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["bash"]
