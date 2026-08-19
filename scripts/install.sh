@@ -44,7 +44,21 @@ free_gb() {
     df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}'
 }
 
-base_id="$("$DOCKER" image inspect -f '{{.Id}}' "$BASE_IMAGE" 2>/dev/null || echo "absent")"
+# The base image's CONTENT, not its Id.
+#
+# Under BuildKit (Docker 23+, and unconditionally in 29) every `docker build`
+# attaches a provenance attestation, so rebuilding the base from byte-identical
+# inputs yields a DIFFERENT image Id each time. Keying on .Id therefore made the
+# key unstable by construction: `install` depends on `base`, `base` rebuilds and
+# re-stamps the Id, the key never matches, and every single `make install`
+# started a fresh multi-hour reinstall. The reuse path could not have worked.
+#
+# .RootFS.Layers is the content-addressed layer chain. It is identical across
+# rebuilds of identical content, and it still changes if the base genuinely
+# changes -- including someone re-tagging a different image as $BASE_IMAGE,
+# which is the case hashing Dockerfile.base alone would miss. Same safety,
+# no false churn.
+base_id="$("$DOCKER" image inspect -f '{{json .RootFS.Layers}}' "$BASE_IMAGE" 2>/dev/null || echo "absent")"
 vars="MEDIA_DIR=${MEDIA_DIR} DEST=${DEST} BASE_IMAGE=${BASE_IMAGE} RAW_IMAGE=${RAW_IMAGE} CONTAINER=${CONTAINER}"
 
 # Every host-side input that can change what stage 2 produces goes in the

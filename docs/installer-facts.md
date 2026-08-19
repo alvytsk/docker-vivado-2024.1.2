@@ -283,3 +283,35 @@ writing to `/root/.Xilinx` and `/tmp` as before, so `TMPDIR` is ignored and the
 scratch paths must be deleted by name.
 
 **Decision:** the installer's scratch lives at `$HOME/.Xilinx` (`/root/.Xilinx`, containing `registry/` and `xinstall/`) plus `/tmp/hsperfdata_root`, and it does not honour `TMPDIR`. `container-install.sh` sets `SCRATCH_DIR`/`SCRATCH_EXTRA` to exactly these.
+
+---
+
+## Observed at Task 10 (real install, 2026-08-19)
+
+- Vivado reports **v2024.1.2** (`Tool Version Limit: 2024.05`, SW Build 5164865),
+  confirming the `-b Update` form recorded above actually applies the update.
+- Base install ~4 min, update ~1-2 min, `docker commit` ~25 min. The commit
+  dominates: it tars a 37.5 GB container diff.
+- Container diff 37.5 GB -> committed image **18 GB**. `docker image inspect
+  .Size` reports the compressed size under Docker 29's image store, so the
+  image-size ceiling in final.bats is a compressed number and must be recorded
+  with the same command it is asserted against.
+- Scratch prune verified empty afterwards: none of `/root/.Xilinx`,
+  `/tmp/hsperfdata_root`, `/tmp/xinstall` survive into the image.
+- `/tools/Xilinx/.xinstall` survives, so `-b Add` (Task 15) can run.
+
+### Two defects the real run exposed
+
+1. **`en_US.UTF-8` must be generated in the base image.**
+   `Vivado/2024.1/bin/rdiArgs.sh` line 37 unconditionally exports
+   `LC_ALL=en_US.UTF-8`. With only `C`/`C.utf8`/`POSIX` present, `vivado`
+   aborts with an unhandled `std::runtime_error` before printing its version,
+   and the message never mentions locales.
+
+2. **The build key must not use the base image's `.Id`.**
+   BuildKit attaches a provenance attestation to every build, so an identical
+   rebuild yields a different `.Id`. Since `install` depends on `base`, the key
+   changed on every invocation and the reuse path could never hit -- every
+   `make install` restarted a multi-hour reinstall. `.RootFS.Layers` is
+   content-addressed and stable; verified by rebuilding the base three times
+   and observing the key unchanged.

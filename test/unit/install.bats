@@ -140,6 +140,18 @@ run_install() {
   [ "$output" = "0" ]
 }
 
+@test "the build key does not depend on the base image Id" {
+  # BuildKit stamps a new image Id on every build (provenance attestation), so
+  # a key derived from .Id can never match on the second run and every
+  # `make install` restarts a multi-hour reinstall. The key must come from the
+  # content-addressed layer chain instead. Guard the mechanism, not the value:
+  # assert install.sh never inspects .Id.
+  run grep -n "image inspect -f '{{.Id}}'" "$REPO_ROOT/scripts/install.sh"
+  [ "$status" -ne 0 ]
+  run grep -F 'RootFS.Layers' "$REPO_ROOT/scripts/install.sh"
+  [ "$status" -eq 0 ]
+}
+
 @test "install rebuilds when the stored key differs" {
   FAKE_RAW_KEY="stale-key" run_install
   [ "$status" -eq 0 ]
