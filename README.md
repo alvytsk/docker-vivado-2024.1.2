@@ -22,37 +22,56 @@ the Zynq-7000 device family only:
 
 ### XC7Z035, XC7Z045 and XC7Z100 cannot be built with this image
 
-They are Zynq-7000 parts, so their **device data is installed** and the tools will
-happily accept them: you can create a project, open a block design and elaborate.
-The limit is enforced by *licensing at tool runtime*, so the failure arrives late —
-synthesis stops with an AMD licensing error. These three parts require a paid
-Enterprise license and are deliberately out of scope. This is documented rather
-than worked around.
+Their **device data is not installed at all**. Under Vivado ML Standard the
+installer ships only the license-free Zynq-7000 devices, so `get_parts
+xc7z045ffg900-2` returns an empty list and Vivado warns *"No part matched the
+expression you provided"*. There is nothing to license and nothing to
+circumvent — the boundary is enforced by device-data scope, which is a stronger
+guarantee than a runtime license check, and the failure arrives immediately
+rather than partway through synthesis.
 
-`test/integration/device-scope.bats` pins that boundary down as observable
-behaviour: it asserts that XC7Z020 synthesises, that the XC7Z045 *part data* is
-present (so a failure cannot be blamed on a missing part), and that XC7Z045 then
-fails with a licensing diagnostic specifically.
+These three parts require a paid Enterprise seat and are deliberately out of
+scope. Adding them means re-running the install with a wider `Modules=` line
+*and* holding the corresponding license.
+
+`test/integration/device-scope.bats` pins the boundary down as observable
+behaviour: XC7Z020 synthesises end to end, XC7Z045 reports `PARTS=0`, building
+for XC7Z045 fails rather than silently succeeding, and the installed device set
+is exactly the seven devices listed above — so a config change that silently
+widens or narrows it fails the suite.
 
 ## Licensing
 
-**The image ships no license file and needs none.** Vivado ML Standard is
-license-free for the seven-part subset above. `XILINXD_LICENSE_FILE` is left unset,
-and `test/integration/final.bats` asserts the image contains no `.lic` file.
+**The image ships no license file of its own and needs none.** Vivado ML
+Standard is license-free for the seven-part subset above.
 
-If you nonetheless want to supply a license — because you have an Enterprise seat and
-want XC7Z045 — the runtime hook is already there, with no image change required:
+Two `.lic` files *are* present, and they are AMD's own:
+`/tools/Xilinx/Vivado/2024.1/data/ip/core_licenses/{Xilinx,XilinxFree}.lic`,
+signed `ISSUER="Xilinx Inc"` and installed by the official installer. They
+declare which IP cores are free or design-linking; they unlock no tool feature.
+`test/integration/final.bats` asserts that **no `.lic` exists outside that AMD
+directory**, and that neither `XILINX_LICENSE_FILE` nor `LM_LICENSE_FILE` is
+set — so nothing in this image depends on a license to behave as tested.
+
+The offline media also contains a `Crack/` directory with a forged all-in-one
+license. It is deliberately never read, copied, or referenced by any part of
+this build, and a unit test asserts the install scripts contain no reference to
+it.
+
+### If you want to add your own license
+
+Node-locked FlexLM licensing **will not work in this image as built.** Stage 3
+renames `libudev.so.1` to stop a crash that otherwise kills `route_design` (see
+*Known workarounds* below), and FlexLM needs udev to compute a host id. A
+floating server license, which does not depend on a local host id, is the
+supported path:
 
 ```bash
-# floating license server
 docker run --rm --init -e XILINXD_LICENSE_FILE=port@host ... vivado:2024.1.2 ...
-
-# or a node-locked file, bind-mounted into $HOME/.Xilinx
-docker run --rm --init -v /path/to/Xilinx.lic:/home/vivado/.Xilinx/Xilinx.lic:ro ... vivado:2024.1.2 ...
 ```
 
-`$HOME` is always `/home/vivado` unless that directory is unwritable, in which case
-the entrypoint falls back to a fresh directory under `/tmp` — see *File ownership*.
+Note that a license alone will not unlock XC7Z035/045/100 here — their device
+data is not installed.
 
 ## Quick start
 
@@ -177,7 +196,11 @@ installer scratch is pruned inside stage 2's container before it exits.
 
 ## Image size and distribution
 
-Final image size: **<recorded in Task 11 Step 6>**.
+Final image size: **18 GB** as reported by `docker image inspect -f '{{.Size}}'`
+(the compressed figure Docker 29's image store returns, and the one
+`final.bats` asserts against a 22 GB ceiling). On disk it is larger: `docker
+images` reports ~56 GB, and the installed tree at `/tools/Xilinx` is **35 GB**.
+Budget CI disk against the 35–56 GB figures, not the 18 GB one.
 
 This is far too large for Docker Hub in a CI loop. Use a **local or self-hosted
 registry**. The two-image split is built for exactly that: the fat
@@ -254,3 +277,49 @@ Installer logs are copied to `/var/log/xinstall/` inside the image (they are sma
 and retained deliberately so a later support question is answerable from the image
 itself). If stage 2 fails, `scripts/install.sh` copies them out to `./build-logs`
 on the host before removing the container.
+
+## Known workarounds baked into the image
+
+Two things in this build exist because the real installer and the real tools
+behaved differently from the documentation. Both are load-bearing; removing
+either breaks the image in a way whose error message does not name the cause.
+
+### `en_US.UTF-8` is generated in stage 1
+
+`Vivado/2024.1/bin/rdiArgs.sh` line 37 unconditionally exports
+`LC_ALL=en_US.UTF-8`, overriding whatever the image sets. If that locale has not
+been *generated* — installing the `locales` package is not enough — `vivado`
+aborts with an unhandled `std::runtime_error` before printing its version, and
+the message never mentions locales.
+
+### `libudev.so.1` is renamed in stage 3
+
+Vivado allocates through its bundled `libtcmalloc`, but the FlexLM licensing
+library `dlopen`s `libudev` lazily at every license check — including inside
+`route_design`. libudev then calls glibc's `realloc` on a tcmalloc pointer and
+the process dies with `realloc(): invalid pointer` (SIGABRT), partway through
+implementation, so no bitstream is ever produced. The crash stack is
+`udev_enumerate_scan_devices → libudev realloc → abort`, called from
+`libXil_lmgr11.so` via `XilReg::Utils::GetHostInfo`.
+
+`libudev` is `dlopen`ed rather than a `NEEDED` dependency and nothing else in
+this image links it, so making the `dlopen` fail is sufficient — Vivado falls
+back to a host id derived without udev and implementation completes. The file is
+renamed rather than deleted, to
+`libudev.so.1.disabled-vivado-tcmalloc-clash`, so the reason is discoverable
+from the filename.
+
+Consequence, deliberate: host-id-based node-locked licensing cannot work here.
+See *Licensing*.
+
+### The smoke test uses the project run flow, not `synth_design`
+
+`write_hw_platform -include_bit` reads the bitstream from the implementation
+*run*. An in-session `synth_design`/`route_design` flow produces a perfectly
+valid `.bit` and then fails with *"Unable to get BIT file from implementation
+run"*, so `test/zynq_smoke.tcl` uses `launch_runs`/`wait_on_run`.
+
+It also explicitly clears `PCW_USE_M_AXI_GP0`: `apply_bd_automation`'s
+`Master "Disable"` only suppresses interconnect automation, not the port
+itself, leaving `M_AXI_GP0_ACLK` without a clock source and failing
+`validate_bd_design` with `BD 41-758`.
