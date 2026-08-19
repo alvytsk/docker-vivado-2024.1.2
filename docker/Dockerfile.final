@@ -1,39 +1,12 @@
-# Parameterised so the Vitis variant reuses this exact runtime layer
-# instead of duplicating it (Task 15).
+# Parameterised so the Vitis variant reuses this exact runtime layer.
 ARG BASE_IMAGE=vivado-tools:2024.1.2-raw
 FROM ${BASE_IMAGE}
 
-# Runtime contract ONLY. No cleanup here: layers are additive, so deleting
-# anything from the parent would add whiteouts and ship the bytes anyway.
-# --chmod on COPY rather than a following `RUN chmod`: the RUN would add an
-# entire layer to flip one permission bit, and stage 3 sits on top of a ~50 GB
-# parent where every extra layer is another metadata round trip on pull.
+# Runtime contract only; --chmod avoids an extra layer for one permission bit.
 COPY --chmod=0644 lib/idresolve.sh      /usr/local/lib/idresolve.sh
 COPY --chmod=0755 scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Disable libudev for Vivado's benefit.
-#
-# Vivado's FlexLM library (libXil_lmgr11.so) dlopens libudev at every licence
-# check -- including inside route_design -- to enumerate devices for a host id.
-# Vivado allocates through its bundled libtcmalloc, but libudev is dlopened
-# lazily, after tcmalloc is already active, so the two end up on opposite sides
-# of the same allocation: libudev calls glibc realloc on a tcmalloc pointer and
-# the process aborts with "realloc(): invalid pointer" / SIGABRT. It kills
-# route_design partway through implementation, so nothing ever reaches a
-# bitstream. Confirmed from the crash stack:
-#   udev_enumerate_scan_devices -> libudev realloc -> abort,
-#   called from libXil_lmgr11.so via XilReg::Utils::GetHostInfo.
-#
-# libudev is dlopened, NOT a NEEDED dependency, and nothing else in this image
-# links it -- so making the dlopen fail is enough: Vivado falls back to a
-# host id derived without udev and implementation completes. Renamed rather
-# than deleted so the library is still there, and the reason is discoverable
-# from the filename alone.
-#
-# Tradeoff, deliberate: host-id-based FlexLM licensing cannot work in this
-# image. That costs nothing here -- the image is license-free by design and
-# ships no licence file -- but a fork that adds a node-locked licence must
-# restore this symlink and solve the allocator clash another way.
+# Break the libudev dlopen: it clashes with Vivado's tcmalloc and aborts route_design. See README "Known workarounds".
 RUN mv /lib/x86_64-linux-gnu/libudev.so.1 \
        /lib/x86_64-linux-gnu/libudev.so.1.disabled-vivado-tcmalloc-clash
 

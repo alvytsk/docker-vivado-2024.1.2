@@ -1,5 +1,4 @@
-# Pinned by digest, not tag. Tags are mutable; a clean rebuild must not
-# silently pick up a different base while the build key stays unchanged.
+# Pinned by digest: tags are mutable and the build key must not miss a swap.
 FROM ubuntu:22.04@sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc
 
 LABEL org.opencontainers.image.base.digest="sha256:2edbbc5dc405e9612ba3584ce95480277e3eb374407b5505fe26f17df77c7dbc"
@@ -8,16 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
-# apt lists are removed in THIS RUN. Removing them later would only add
-# whiteouts while the bytes stayed in this layer and shipped anyway.
-#
-# en_US.UTF-8 must be GENERATED, not merely have the `locales` package present.
-# Vivado's launcher (Vivado/2024.1/bin/rdiArgs.sh, line 37) unconditionally
-# exports LC_ALL/LANG=en_US.UTF-8 regardless of what the image sets. If that
-# locale does not exist, setlocale fails and vivado aborts with an unhandled
-# std::runtime_error before printing so much as its version -- an obscure
-# crash whose message never mentions locales. C.UTF-8 alone is not enough
-# because the launcher overrides it.
+# en_US.UTF-8 must be GENERATED or vivado aborts; apt lists dropped in this same layer. See README "Known workarounds".
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libtinfo5 libncurses5 \

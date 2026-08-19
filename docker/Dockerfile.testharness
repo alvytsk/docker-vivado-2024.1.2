@@ -1,6 +1,3 @@
 FROM bats/bats:1.10.0
-# docker-cli only -- the daemon is the host's, reached through the socket.
-# make is here for final.bats, which asks `make -n` what the stage-3 recipe
-# actually is instead of grepping the Makefile for a string that appears
-# everywhere. diffutils for the argv comparisons in the unit tests.
+# docker-cli reaches the host daemon via the socket; make and diffutils are used by the tests.
 RUN apk add --no-cache docker-cli bash coreutils make diffutils
