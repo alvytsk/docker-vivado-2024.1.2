@@ -32,6 +32,23 @@ run_install() {
   run bash "$REPO_ROOT/scripts/install.sh"
 }
 
+@test "install refuses to run when MEDIA_DIR is unset" {
+  DOCKER="$TMP/bin/docker" REPO_ROOT_OVERRIDE="$REPO_ROOT" \
+  run env -u MEDIA_DIR bash "$REPO_ROOT/scripts/install.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MEDIA_DIR"* ]]
+}
+
+# Empty is what `make` produces from an undefined variable, so it has to fail
+# the same way unset does.
+@test "install refuses to run when MEDIA_DIR is empty" {
+  MEDIA_DIR="" DOCKER="$TMP/bin/docker" REPO_ROOT_OVERRIDE="$REPO_ROOT" \
+  run bash "$REPO_ROOT/scripts/install.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"MEDIA_DIR"* ]]
+}
+
+# A path that merely does not exist is the media check's case, not the guard's.
 @test "install fails fast and names the path when media is missing" {
   rm -f "$TMP/media/Xilinx_Unified_2024_1_0522_2023.iso"
   run_install

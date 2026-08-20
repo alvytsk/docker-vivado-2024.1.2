@@ -76,7 +76,7 @@ data is not installed.
 ## Quick start
 
 ```bash
-make build
+make MEDIA_DIR=/path/to/Xilinx_2024.1 build
 
 docker run --rm --init -v "$PWD:/work" -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) vivado:2024.1.2 vivado -mode batch -source build.tcl
 ```
@@ -84,6 +84,27 @@ docker run --rm --init -v "$PWD:/work" -e HOST_UID=$(id -u) -e HOST_GID=$(id -g)
 `make build` runs stage 1 (`docker build` of the base image), stage 2 (the install,
 which is the multi-hour step) and stage 3 (the thin runtime layer), in that order,
 as real Make prerequisites.
+
+### `MEDIA_DIR` is required and has no default
+
+It names the directory holding the two AMD ISOs — `Xilinx_Unified_2024_1_0522_2023.iso`
+and `Xilinx_Vivado_Vitis_Update_2024_1_2_0906_0624.iso`. There is deliberately no
+default: any default is one machine's path and silently wrong everywhere else,
+which turns *"you did not say where the media is"* into *"the base ISO is missing"* —
+the same message a genuinely absent ISO gives. Unset or empty is refused by name,
+by the `require-media` guard in the Makefile and again in the scripts themselves.
+
+Export it instead if you prefer — Make imports the environment, so it reaches every
+target that needs one:
+
+```bash
+export MEDIA_DIR=/path/to/Xilinx_2024.1
+make build
+```
+
+Three targets read the media and therefore require it: `install` (hence `final`,
+`build`, and every `test-*` that depends on them), `verify-media`, and `add-vitis`.
+`lint`, `test-unit`, `harness` and `base` do not.
 
 You do not need to source `settings64.sh`. The entrypoint sources it for you, so
 `vivado`, `XILINX_VIVADO` and friends are already in the environment of whatever

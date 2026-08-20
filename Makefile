@@ -12,11 +12,24 @@ FINAL_IMAGE     := vivado:2024.1.2
 VITIS_RAW_IMAGE := vivado-vitis:2024.1.2-raw
 VITIS_IMAGE     := vivado-vitis:2024.1.2
 
-MEDIA_DIR := /mnt/d/Projects/Xilinx_2024.1
+# MEDIA_DIR has no default: any default is one machine's path and silently
+# wrong everywhere else. Pass it per invocation, or export it.
 DEST      := /tools/Xilinx
 
 .PHONY: lint test-unit harness test-integration base install verify-media \
-        final build test test-smoke add-vitis test-vitis test-all acceptance
+        final build test test-smoke add-vitis test-vitis test-all acceptance \
+        require-media
+
+# Fails before anything mounts, hashes or installs. The scripts guard too, for
+# direct invocation; only here can the message name the target that was typed.
+require-media:
+	@test -n "$(MEDIA_DIR)" || { \
+	  echo "ERROR: MEDIA_DIR is not set." >&2; \
+	  echo "       It must name the directory holding the two AMD ISOs:" >&2; \
+	  echo "         Xilinx_Unified_2024_1_0522_2023.iso" >&2; \
+	  echo "         Xilinx_Vivado_Vitis_Update_2024_1_2_0906_0624.iso" >&2; \
+	  echo "       e.g. make MEDIA_DIR=/path/to/Xilinx_2024.1 $(or $(MAKECMDGOALS),build)" >&2; \
+	  exit 1; }
 
 lint:
 	docker run --rm -v "$(REPO):/mnt" -w /mnt $(SHELLCHECK_IMAGE) \
@@ -31,10 +44,10 @@ harness:
 base:
 	docker build -f docker/Dockerfile.base -t $(BASE_IMAGE) .
 
-install: base
+install: require-media base
 	MEDIA_DIR=$(MEDIA_DIR) DEST=$(DEST) bash scripts/install.sh
 
-verify-media:
+verify-media: require-media
 	@cd $(MEDIA_DIR) && sha256sum \
 		Xilinx_Unified_2024_1_0522_2023.iso \
 		Xilinx_Vivado_Vitis_Update_2024_1_2_0906_0624.iso \
@@ -66,8 +79,8 @@ test-smoke: final
 
 # Phony and unkeyed: it reruns in full on every separate `make` invocation.
 # Depend on it (as test-vitis does) rather than invoking it beforehand.
-add-vitis: install
-	bash scripts/add-vitis.sh
+add-vitis: require-media install
+	MEDIA_DIR=$(MEDIA_DIR) bash scripts/add-vitis.sh
 	docker build --network=none -f docker/Dockerfile.final \
 		--build-arg BASE_IMAGE=$(VITIS_RAW_IMAGE) -t $(VITIS_IMAGE) .
 

@@ -3,7 +3,9 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT_OVERRIDE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DOCKER="${DOCKER:-docker}"
-MEDIA_DIR="${MEDIA_DIR:-/mnt/d/Projects/Xilinx_2024.1}"
+# Required, no default: a stale default reports "the base ISO is missing"
+# instead of "you did not say where the media is".
+: "${MEDIA_DIR:?is not set: name the directory holding the two AMD ISOs}"
 FROM_IMAGE="${RAW_IMAGE:-vivado-tools:2024.1.2-raw}"
 RAW_OUT="${VITIS_RAW_IMAGE:-vivado-vitis:2024.1.2-raw}"
 CONTAINER="${CONTAINER:-vivado-add-vitis}"

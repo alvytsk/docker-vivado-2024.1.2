@@ -7,7 +7,9 @@ REPO_ROOT="${REPO_ROOT_OVERRIDE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
 source "${REPO_ROOT}/lib/buildkey.sh"
 
 DOCKER="${DOCKER:-docker}"
-MEDIA_DIR="${MEDIA_DIR:-/mnt/d/Projects/Xilinx_2024.1}"
+# Required, no default: a stale default reports "the base ISO is missing"
+# instead of "you did not say where the media is".
+: "${MEDIA_DIR:?is not set: name the directory holding the two AMD ISOs}"
 DEST="${DEST:-/tools/Xilinx}"
 BASE_IMAGE="${BASE_IMAGE:-vivado-base:22.04}"
 RAW_IMAGE="${RAW_IMAGE:-vivado-tools:2024.1.2-raw}"
